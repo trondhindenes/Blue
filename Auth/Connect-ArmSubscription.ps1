@@ -48,7 +48,7 @@ Function Connect-ArmSubscription
 		}
 		Catch
 		{
-			#Error-handling here
+			write-Error $_.Exception
 		}
 		
 	}
@@ -168,7 +168,7 @@ Function Connect-ArmSubscription
             $TenantauthResult = Get-InternalAcquireToken @Params
         
             Write-Debug "Using access key $($TenantauthResult.AccessToken)"
-            $SubscriptionResult  = Get-InternalRest -Uri "https://management.azure.com/subscriptions" -BearerToken $TenantauthResult.AccessToken -Apiversion "2015-01-01"
+            $SubscriptionResult  = Get-InternalRest -Uri "https://management.azure.com/subscriptions" -BearerToken $authtoken -Apiversion "2015-01-01"
             if ($SubscriptionResult.Value.count -gt 0)
             {
                 foreach ($Subscription in $SubscriptionResult.Value)

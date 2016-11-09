@@ -1,7 +1,7 @@
 @{
 
 # Script module or binary module file associated with this manifest.
-RootModule = 'Blue.psm1'
+RootModule = 'blue.psm1'
 
 # Version number of this module.
 ModuleVersion = '0.0.1'
@@ -43,10 +43,10 @@ Description = 'A community-driven alternative to the official Powershell module 
 # RequiredModules = @()
 
 # Assemblies that must be loaded prior to importing this module
- RequiredAssemblies = @(
-    'bin\Microsoft.IdentityModel.Clients.ActiveDirectory.dll'
-    'bin\Newtonsoft.Json.dll'
-    )
+# RequiredAssemblies = @(
+#    'bin\Microsoft.IdentityModel.Clients.ActiveDirectory.dll'
+#    'bin\Newtonsoft.Json.dll'
+#    )
 
 # Script files (.ps1) that are run in the caller's environment prior to importing this module.
 # ScriptsToProcess = @()

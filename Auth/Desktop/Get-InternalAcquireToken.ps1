@@ -27,18 +27,37 @@ Function Get-InternalAcquireToken
     
 
     $AuthContext = New-Object -TypeName Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContext -ArgumentList ($LoginUrl)
+    
 
     if ($PSCmdlet.ParameterSetName -eq "ConnectByCredObject")
     {
-        $PromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::Never
+        #$PromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::Never
         
         Try
         {
-            $UserCredential = New-Object -TypeName Microsoft.IdentityModel.Clients.ActiveDirectory.UserCredential -ArgumentList ($Credential.UserName, $Credential.Password)
-            $authResult = $AuthContext.AcquireToken($ResourceUrl,$ClientId, $UserCredential)
+            #TODO: check #GET https://login.microsoftonline.com/common/UserRealm/trond.hindenes@nordcloud.com?api-version=1.0 HTTP/1.1
+            $Url = "https://login.microsoftonline.com/Common/oauth2/token"
+            
+            $encodedResource = [System.Net.WebUtility]::UrlEncode($resourceurl) 
+            $body = "resource=$($encodedResource)&client_id=$($DefaultClientId)&grant_type=password&username=$($Credential.Username)&scope=openid&password=$($Credential.GetNetworkCredential().Password)"
+
+            $Result = Invoke-RestMethod -UseBasicParsing -Method Post -Uri $Url -Body $body -ContentType "application/x-www-form-urlencoded"
+            $AuthResult = "" | Select AccessToken, RefreshToken, ExpiresOn
+
+            $Expires = [System.DateTimeOffset]::FromUnixTimeSeconds($Result.expires_on)
+            $ExpiresUtc = $Expires.UtcDateTime
+            
+            $AuthResult.AccessToken = $Result.access_token
+            $AuthResult.ExpiresOn = $ExpiresUtc
+            $AuthResult.RefreshToken = $Result.refresh_token
+
+            return $AuthResult
+
+
         }
         Catch
         {
+            write-verbose $_.exception.tostring()
         }
         
     }
@@ -59,7 +78,7 @@ Function Get-InternalAcquireToken
             if ($CacheHit)
             {
                 Write-verbose "     Attempting to authenticate using TokenCache"
-                $ThisPromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::Never        
+                $ThisPromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::Never
             }
             Else
             {
@@ -69,7 +88,15 @@ Function Get-InternalAcquireToken
         }
         Try
         {
-            $authResult = $AuthContext.AcquireToken($ResourceUrl,$ClientId, $RedirectUri, $ThisPromptBehavior)
+            $AuthPlatformParameters = New-Object -TypeName Microsoft.IdentityModel.Clients.ActiveDirectory.PlatformParameters -ArgumentList ($ThisPromptBehavior)
+            $authResult = $AuthContext.AcquireTokenAsync($ResourceUrl,$ClientId, $RedirectUri, $AuthPlatformParameters)
+            if ($authResult.Exception)
+            {
+                throw $authResult.Exception.ToString()
+            }
+            
+            $authResult.Wait()
+            $authresult = $authResult.result
         }
         Catch
         {
@@ -81,8 +108,11 @@ Function Get-InternalAcquireToken
             if (($PromptBehavior -eq "Suppress") -or ($PromptBehavior -eq "Auto"))
             {
                 #If that failed, and suppress is on, switch to auto
-                $ThisPromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::Always
-                $authResult = $AuthContext.AcquireToken($ResourceUrl,$ClientId, $RedirectUri, $ThisPromptBehavior)
+                $ThisPromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::Auto
+                $AuthPlatformParameters = New-Object -TypeName Microsoft.IdentityModel.Clients.ActiveDirectory.PlatformParameters -ArgumentList ($ThisPromptBehavior)
+                $authResult = $AuthContext.AcquireTokenAsync($ResourceUrl,$ClientId, $RedirectUri, $AuthPlatformParameters)
+                $authResult.Wait()
+                $authResult = $authResult.result
             }
         }
         
@@ -91,7 +121,10 @@ Function Get-InternalAcquireToken
     {
         try
         {
-            $authResult = $AuthContext.AcquireTokenByRefreshToken($RefreshToken,$ClientId)    
+            $Assertion = New-Object -TypeName Microsoft.IdentityModel.Clients.ActiveDirectory.PlatformParameters -ArgumentList ($RefreshToken)
+            $authResult = $AuthContext.AcquireTokenAsync($Assertion,$ClientId)
+            $authResult.Wait()
+            $authresult = $authResult.result
         }
         Catch
         {

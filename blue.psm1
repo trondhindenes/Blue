@@ -1,15 +1,45 @@
 $Script:thismodulepath = $psscriptroot
 
+if ($PSVersionTable.PSEdition -eq $null)
+{
+    $PSEdition = "Desktop"
+}
+
+write-verbose "PsEdition is $Psedition, loading dlls from $($psscriptroot)\bin\$($PsEdition)\"
+
+foreach ($File in Get-Childitem "$($psscriptroot)\bin\$($PsEdition)\")
+{
+    write-verbose "Loading file $($file.fullname)"
+    Import-Module $file.fullname
+}
+
+Function Load-InternalFunctionFile
+{
+    Param ($FunctionPath)
+    $FileList = @()
+    Write-Verbose "Loading functions from $FunctionPath"
+    $FileList += Get-ChildItem $FunctionPath\*.ps1
+    $FileList += get-childitem (Join-Path $FunctionPath $PSEdition)  -ErrorAction SilentlyContinue| where {$_.Extension -eq ".ps1"} -ErrorAction SilentlyContinue
+    if (get-childitem (Join-Path $FunctionPath $PSEdition) -ErrorAction SilentlyContinue)
+    {
+        Write-Verbose "Platform-specific path found, loading functions from $(Join-Path $FunctionPath $PSEdition)"
+    }
+    $FileList = $FileList | where {$_.Extension -match "ps"}
+    $FileList
+}
+
 #Load function files
-Get-ChildItem $psscriptroot\Auth\*.ps1 | Foreach-Object { . $_.FullName }
-Get-ChildItem $psscriptroot\Rest\*.ps1 | Foreach-Object { . $_.FullName }
-Get-ChildItem $psscriptroot\ResourceGroup\*.ps1 | Foreach-Object { . $_.FullName }
-Get-ChildItem $psscriptroot\Resource\*.ps1 | Foreach-Object { . $_.FullName }
-Get-ChildItem $psscriptroot\VirtualMachine\*.ps1 | Foreach-Object { . $_.FullName }
-Get-ChildItem $psscriptroot\Network\*.ps1 | Foreach-Object { . $_.FullName }
-Get-ChildItem $psscriptroot\Automation\*.ps1 | Foreach-Object { . $_.FullName }
-Get-ChildItem $psscriptroot\Helpers\*.ps1 | Foreach-Object { . $_.FullName }
-Get-ChildItem $psscriptroot\TemplateDeployment\*.ps1 | Foreach-Object { . $_.FullName }
+$Load = @()
+$Load += Load-InternalFunctionFile $psscriptroot\Auth
+$Load += Load-InternalFunctionFile $psscriptroot\Rest
+$Load += Load-InternalFunctionFile $psscriptroot\ResourceGroup
+$Load += Load-InternalFunctionFile $psscriptroot\Resource
+$Load += Load-InternalFunctionFile $psscriptroot\VirtualMachine
+$Load += Load-InternalFunctionFile $psscriptroot\Network
+$Load += Load-InternalFunctionFile $psscriptroot\Automation
+$Load += Load-InternalFunctionFile $psscriptroot\Helpers
+$Load += Load-InternalFunctionFile $psscriptroot\TemplateDeployment
+foreach ($File in $Load){. $file.FullName}
 
 #Setup internal variables. These will be filled by Connect-ArmSubscription and should not be manipulated directly other functions.
 [string]$script:CurrentSubscriptionId = $null
@@ -31,9 +61,29 @@ $Script:PsDefaultParameterValues.Add("Invoke-RestMethod:Verbose",$False)
 $Script:PsDefaultParameterValues.Add("Invoke-WebRequest:Verbose",$False)
 
 #Load autoload classes. Every file in Classes\Autoload needs to be a valid .cs file
-$Files = Get-ChildItem (Join-path $Script:thismodulepath "Classes\AutoLoad")
-Write-verbose "Loading types in folder Classes\AutoLoad"
-add-Type -Path ($Files | select -ExpandProperty FullName)
+if ($PSEdition -eq "Desktop")
+{
+    $Files = Get-ChildItem (Join-path $Script:thismodulepath "Classes\AutoLoad")
+    Write-verbose "Loading types in folder Classes\AutoLoad"
+    try
+    {
+        foreach ($file in $files | where {$_.Extension -eq ".cs"})
+        {
+            Write-verbose "Loading type file $($File.FullName)"
+            add-Type -Path ($File.FullName)
+        }
+    }
+    catch
+    {
+        foreach ($file in $files |where {$_.Extension -eq ".cs"})
+        {
+            Write-verbose "Loading type file $($File.FullName) (2nd try)"
+            add-Type -Path ($File.FullName)
+        }
+    }
+
+}
+
 
 <#
 foreach ($file in $files)
